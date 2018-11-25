@@ -101,6 +101,7 @@ class SearchResult:
     def __str__(self):
         return 'Google Search Result: "%s"' % self.url
 
+
 class GoogleSearch(object):
     SEARCH_URL_0 = "http://www.google.%(tld)s/search?hl=%(lang)s&q=%(query)s&btnG=Google+Search"
     NEXT_PAGE_0 = "http://www.google.%(tld)s/search?hl=%(lang)s&q=%(query)s&start=%(start)d"
@@ -371,6 +372,52 @@ class GoogleSearch(object):
 
         s =    re.sub(r'&#(\d+);',  ascii_replacer, str, re.U)
         return re.sub(r'&([^;]+);', entity_replacer, s, re.U)
+
+class GoogleNewsSearch(GoogleSearch):
+    SEARCH_URL_0 = "http://www.google.%(tld)s/search?hl=%(lang)s&source=lnms&tbm=nws&q=%(query)s&btnG=Google+News+Search"
+    NEXT_PAGE_0 = "http://www.google.%(tld)s/search?hl=%(lang)s&source=lnms&tbm=nws&q=%(query)s&start=%(start)d"
+    SEARCH_URL_1 = "http://www.google.%(tld)s/search?hl=%(lang)s&source=lnms&tbm=nws&q=%(query)s&num=%(num)d&btnG=Google+News+Search"
+    NEXT_PAGE_1 = "http://www.google.%(tld)s/search?hl=%(lang)s&source=lnms&tbm=nws&q=%(query)s&num=%(num)d&start=%(start)d"
+
+    def __init__(self, query, random_agent=True, debug=False, lang="en", tld="com", re_search_strings=None, repeat=None):
+        super().__init__(query, random_agent=True, debug=False, lang="en", tld="com", re_search_strings=None, repeat=None)
+
+    def _get_results_page(self):
+        """Construct search url, and get the page content"""
+        if self._page == 0:
+            if self._results_per_page == 10:
+                url = GoogleNewsSearch.SEARCH_URL_0
+            else:
+                url = GoogleNewsSearch.SEARCH_URL_1
+        else:
+            if self._results_per_page == 10:
+                url = GoogleNewsSearch.NEXT_PAGE_0
+            else:
+                url = GoogleNewsSearch.NEXT_PAGE_1
+
+        safe_url = [url % { 'query': urllib.parse.quote_plus(self.query),
+                           'start': self._page * self._results_per_page,
+                           'num': self._results_per_page,
+                           'tld' : self._tld,
+                           'lang' : self._lang }]
+
+        # possibly extend url with optional properties
+        if self._first_indexed_in_previous:
+            safe_url.extend(["&as_qdr=", self._first_indexed_in_previous])
+        if self._filetype:
+            safe_url.extend(["&as_filetype=", self._filetype])
+        if self.repeat:
+            safe_url.extend(["&filter=", '0'])
+
+        safe_url = "".join(safe_url)
+        self._last_search_url = safe_url
+
+        try:
+            page = self.browser.get_page(safe_url)
+        except BrowserError as e:
+            raise SearchError("Failed getting %s: %s" % (e.url, e.error))
+
+        return BeautifulSoup(page, "html.parser")
 
 class GoogleVideoSearch(object):
     SEARCH_URL_0 = "http://www.google.%(tld)s/search?tbm=vid&hl=%(lang)s&q=%(query)s"
